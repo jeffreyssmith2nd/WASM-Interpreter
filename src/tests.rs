@@ -1,8 +1,9 @@
+#[cfg(test)]
 mod test {
-    #[cfg(test)]
+    #[test]
     fn square_test() {
-        let square_code = "
-        (func $square (export "square") (type $t2) (param $p0 i32) (result i32)
+        let unoptimized_square_code = "
+        (func $square (export \"square\") (param $p0 i32) (result i32)
         (local $l0 i32) (local $l1 i32) (local $l2 i32) (local $l3 i32) (local $l4 i32) (local $l5 i32)
         get_global $g0
         set_local $l0
@@ -28,6 +29,15 @@ mod test {
         get_local $l5
         return)
         "
+
+        let optimized_square_code = "
+        (func $square (export \"square\") (param $p0 i32) (result i32)
+        get_local $l0
+        get_local $l0
+        i32.mul
+        return)
+        "
+
         unimplemented();
     }
 }

@@ -1,4 +1,3 @@
-
 pub trait Value {}
 
 impl Value for i32 {}

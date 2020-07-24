@@ -1,26 +1,23 @@
-pub trait Value {}
+use std::env;
+use std::fs;
+use std::fs::File;
+use std::io::Read;
 
-impl Value for i32 {}
-impl Value for u32 {}
-impl Value for i64 {}
-impl Value for u64 {}
-impl Value for f32 {}
-impl Value for f64 {}
-
-#[derive(Default)]
-struct Machine {
-    instructions: Vec<String>,
-    stack: Vec<Box<dyn Value>>,
-    memory: Vec<u8>,
-}
-
-impl Machine {
-    fn execute(&self) {
-        println!("Execute called!");
-    }
-}
+mod parser;
 
 fn main() {
-    let machine = Machine::default();
-    machine.execute();
+    let args: Vec<String> = env::args().collect();
+    let filename = &args[1];
+    let buffer = get_file_as_byte_vec(filename);
+    let mut p = parser::Parser::new(buffer);
+    p.parse();
+}
+
+fn get_file_as_byte_vec(filename: &String) -> Vec<u8> {
+    let mut f = File::open(&filename).expect("no file found");
+    let metadata = fs::metadata(&filename).expect("unable to read metadata");
+    let mut buffer = vec![0; metadata.len() as usize];
+    f.read(&mut buffer).expect("buffer overflow");
+
+    buffer
 }

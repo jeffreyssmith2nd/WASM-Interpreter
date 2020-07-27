@@ -33,24 +33,44 @@ impl Parser {
                 // This is the type section
                 // TODO: Use one cursor
                 let mut buf = std::io::Cursor::new(&self.buffer[self.pos..]);
+                println!("{}", buf.position());
                 let (type_vector_size, bytes_read): (u32, usize) = buf.read_leb128().unwrap();
+                println!("{}", buf.position());
                 println!(
                     "type_vector_size: {} bytes_read {}",
                     type_vector_size, bytes_read
                 );
                 self.pos += bytes_read;
-                let func_byte = self.buffer[self.pos];
-                self.pos += 1;
-                assert_eq!(func_byte, 0x60, "Function did not start with 0x60");
-                let mut buf = std::io::Cursor::new(&self.buffer[self.pos..]);
-                let (param_vector_size, bytes_read): (u32, usize) = buf.read_leb128().unwrap();
-                println!(
-                    "param_vector_size: {} bytes_read {}",
-                    param_vector_size, bytes_read
-                );
-                self.pos += bytes_read;
-                for i in 0..param_vector_size {
-                    println!("{:x}", self.buffer[self.pos + i as usize]);
+                for _ in 0..type_vector_size {
+                    let func_byte = self.buffer[self.pos];
+                    self.pos += 1;
+                    assert_eq!(func_byte, 0x60, "Function did not start with 0x60");
+                    let mut buf = std::io::Cursor::new(&self.buffer[self.pos..]);
+                    let (param_vector_size, bytes_read): (u32, usize) = buf.read_leb128().unwrap();
+                    println!(
+                        "param_vector_size: {} bytes_read {}",
+                        param_vector_size, bytes_read
+                    );
+                    self.pos += bytes_read;
+                    let mut i: usize = 0;
+                    while i < param_vector_size as usize {
+                        println!("par val: {:x}", self.buffer[self.pos + i as usize]);
+                        i += 1;
+                    }
+                    self.pos += i;
+                    let mut buf = std::io::Cursor::new(&self.buffer[self.pos..]);
+                    let (return_vector_size, bytes_read): (u32, usize) = buf.read_leb128().unwrap();
+                    println!(
+                        "return_vector_size: {} bytes_read {}",
+                        return_vector_size, bytes_read
+                    );
+                    self.pos += bytes_read;
+                    let mut i: usize = 0;
+                    while i < return_vector_size as usize {
+                        println!("ret val: {:x}", self.buffer[self.pos + i as usize]);
+                        i += 1;
+                    }
+                    self.pos += i;
                 }
             }
             2 => {

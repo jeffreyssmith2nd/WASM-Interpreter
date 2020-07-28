@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 wasabi_leb128 = "0.4.0"
+byteorder = "1.3.4"

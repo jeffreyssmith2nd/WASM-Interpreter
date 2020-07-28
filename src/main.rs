@@ -9,7 +9,7 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let filename = &args[1];
     let buffer = get_file_as_byte_vec(filename);
-    let mut p = parser::Parser::new(buffer);
+    let mut p = parser::Parser::new(&buffer);
     p.parse();
 }
 

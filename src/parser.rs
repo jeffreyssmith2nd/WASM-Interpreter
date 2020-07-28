@@ -122,14 +122,34 @@ impl<'a> Parser<'a> {
                     for _ in 0..code_vector_size {
                         let (code_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
                         println!("code_size: {}", code_size);
+                        let (locals_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        println!("locals_size: {}", locals_size);
+                        for _ in 0..locals_size {
+                            println!("do locals");
+                        }
                         for _ in 0..code_size {
-                            let (locals_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                            println!("locals_size: {}", locals_size);
-                            for _ in 0..locals_size {
-                                println!("do locals");
-                            }
                             // Handle opcodes
-                            panic!("implement opcode handling");
+                            let opcode = self.cursor.read_u8().unwrap();
+                            println!("opcode: {:x}", opcode);
+                            match opcode {
+                                0x20 => {
+                                    // local.get
+                                    let localidx = self.cursor.read_u8().unwrap();
+                                    println!("opcode: {:x}, localidx: {}", opcode, localidx);
+                                }
+                                0x0B => {
+                                    // function end byte
+                                    println!("function end byte");
+                                    break;
+                                }
+                                0x6A => {
+                                    // i32.add
+                                    println!("i32.add");
+                                }
+                                _ => {
+                                    println!("unmatched opcode");
+                                }
+                            }
                         }
                     }
                 }

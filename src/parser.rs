@@ -9,7 +9,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(buf: &'a Vec<u8>) -> Parser<'a> {
+    pub fn new(buf: &'a [u8]) -> Parser<'a> {
         Parser {
             len: buf.len(),
             cursor: Cursor::new(&buf),
@@ -33,86 +33,80 @@ impl<'a> Parser<'a> {
             match section_id {
                 0 => {
                     // This is a custom section
-                    println!("custom section");
-                    panic!("not implemented");
+                    unimplemented!("custom section");
                 }
                 1 => {
                     // This is the type section
-                    println!("type section");
                     let (type_vector_size, _) = self.cursor.read_leb128().unwrap();
-                    println!("type_vector_size: {}", type_vector_size);
                     for _ in 0..type_vector_size {
                         let func_byte = self.cursor.read_u8().unwrap();
                         assert_eq!(func_byte, 0x60, "Function did not start with 0x60");
                         let (param_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("param_vector_size: {}", param_vector_size);
+                        let mut t: Type = Default::default();
                         for _ in 0..param_vector_size {
                             let param_value = self.cursor.read_u8().unwrap();
-                            println!("par val: {:x}", param_value);
+                            t.params.push(param_value);
                         }
                         let (return_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("return_vector_size: {}", return_vector_size);
                         for _ in 0..return_vector_size {
                             let return_value = self.cursor.read_u8().unwrap();
-                            println!("ret val: {:x}", return_value);
+                            t.returns.push(return_value);
                         }
+                        println!("{:?}", t);
                     }
                 }
                 2 => {
                     // This is the import section
-                    println!("import section");
-                    panic!("not implemented");
+                    unimplemented!("import section");
                 }
                 3 => {
-                    println!("function section");
                     let (func_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                    println!("func_vector_size: {}", func_vector_size);
                     for _ in 0..func_vector_size {
                         let (typeidx, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("typeidx: {}", typeidx);
+                        let func = Function {
+                            type_index: typeidx,
+                        };
+                        println!("{:?}", func);
                     }
                 }
                 4 => {
                     // This is the table section
-                    println!("table section");
-                    panic!("not implemented");
+                    unimplemented!("table section");
                 }
                 5 => {
                     // This is the memory section
-                    println!("memory section");
-                    panic!("not implemented");
+                    unimplemented!("memory section");
                 }
                 6 => {
                     // This is the global section
-                    println!("global section");
-                    panic!("not implemented");
+                    unimplemented!("global section");
                 }
                 7 => {
                     // This is the export section
-                    println!("export section");
                     let (export_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                    println!("export_vector_size: {}", export_vector_size);
                     for _ in 0..export_vector_size {
                         let (name_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("name_size: {}", name_size);
                         let mut name_buf = vec![0u8; name_size as usize];
                         self.cursor.read_exact(&mut name_buf).unwrap();
                         let name = std::str::from_utf8(name_buf.as_slice());
-                        println!("name {}", name.unwrap());
                         let export_type = self.cursor.read_u8().unwrap();
                         let (export_index, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("export_type {} export_index {}", export_type, export_index);
+
+                        let export = Export {
+                            name: name.unwrap().to_string(),
+                            type_index: export_type,
+                            index: export_index,
+                        };
+                        println!("{:?}", export);
                     }
                 }
                 8 => {
                     // This is the start section
-                    println!("start section");
-                    panic!("not implemented");
+                    unimplemented!("start section");
                 }
                 9 => {
                     // This is the element section
-                    println!("element section");
-                    panic!("not implemented");
+                    unimplemented!("element section");
                 }
                 10 => {
                     // This is the code section
@@ -155,8 +149,7 @@ impl<'a> Parser<'a> {
                 }
                 11 => {
                     // This is the data section
-                    println!("data section");
-                    panic!("not implemented");
+                    unimplemented!("data section");
                 }
                 _ => {
                     panic!("Bad section id");
@@ -165,15 +158,22 @@ impl<'a> Parser<'a> {
         }
     }
 
-    pub fn verify_preamble(&mut self) {
+    fn verify_preamble(&mut self) {
         let expected_preamble = vec![0x00, 0x61, 0x73, 0x6d];
         let expected_version = vec![0x01, 0x00, 0x00, 0x00];
 
         let mut preamble = vec![0u8; 4];
         let mut version = vec![0u8; 4];
 
-        self.cursor.read_exact(&mut preamble);
-        self.cursor.read_exact(&mut version);
+        let res = self.cursor.read_exact(&mut preamble);
+        if let Err(e) = res {
+            panic!("Error reading preamble: {}", e);
+        }
+
+        let res = self.cursor.read_exact(&mut version);
+        if let Err(e) = res {
+            panic!("Error reading version: {}", e);
+        }
 
         if preamble != expected_preamble {
             panic!("Invalid preamble!");
@@ -182,4 +182,22 @@ impl<'a> Parser<'a> {
             panic!("Invalid version!");
         }
     }
+}
+
+#[derive(Debug)]
+struct Export {
+    name: String,
+    type_index: u8,
+    index: u32,
+}
+
+#[derive(Debug)]
+struct Function {
+    type_index: u32,
+}
+
+#[derive(Debug, Default)]
+struct Type {
+    params: Vec<u8>,
+    returns: Vec<u8>,
 }

@@ -25,9 +25,9 @@ impl<'a> Parser<'a> {
             }
 
             let section_id = self.cursor.read_u8().unwrap();
-            println!("section_id {}", section_id);
-
             let (section_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+
+            println!("section_id {}", section_id);
             println!("section_size: {}", section_size);
 
             match section_id {
@@ -115,12 +115,12 @@ impl<'a> Parser<'a> {
                     println!("code_vector_size: {}", code_vector_size);
                     for _ in 0..code_vector_size {
                         let (code_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("code_size: {}", code_size);
                         let (locals_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        println!("locals_size: {}", locals_size);
+
                         for _ in 0..locals_size {
                             println!("do locals");
                         }
+
                         for _ in 0..code_size {
                             // Handle opcodes
                             let opcode = self.cursor.read_u8().unwrap();
@@ -129,7 +129,7 @@ impl<'a> Parser<'a> {
                                 0x20 => {
                                     // local.get
                                     let localidx = self.cursor.read_u8().unwrap();
-                                    println!("opcode: {:x}, localidx: {}", opcode, localidx);
+                                    println!("local.get {}", localidx);
                                 }
                                 0x0B => {
                                     // function end byte

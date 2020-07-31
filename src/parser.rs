@@ -19,6 +19,8 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) {
         self.verify_preamble();
 
+        let mut m: Module = Default::default();
+
         loop {
             if self.cursor.position() == self.len as u64 {
                 break;
@@ -53,6 +55,7 @@ impl<'a> Parser<'a> {
                             t.returns.push(return_value);
                         }
                         println!("{:?}", t);
+                        m.types.push(t);
                     }
                 }
                 2 => {
@@ -67,6 +70,7 @@ impl<'a> Parser<'a> {
                             type_index: typeidx,
                         };
                         println!("{:?}", func);
+                        m.functions.push(func);
                     }
                 }
                 4 => {
@@ -98,6 +102,7 @@ impl<'a> Parser<'a> {
                             index: export_index,
                         };
                         println!("{:?}", export);
+                        m.exports.push(export);
                     }
                 }
                 8 => {
@@ -121,30 +126,7 @@ impl<'a> Parser<'a> {
                             println!("do locals");
                         }
 
-                        for _ in 0..code_size {
-                            // Handle opcodes
-                            let opcode = self.cursor.read_u8().unwrap();
-                            println!("opcode: {:x}", opcode);
-                            match opcode {
-                                0x20 => {
-                                    // local.get
-                                    let localidx = self.cursor.read_u8().unwrap();
-                                    println!("local.get {}", localidx);
-                                }
-                                0x0B => {
-                                    // function end byte
-                                    println!("function end byte");
-                                    break;
-                                }
-                                0x6A => {
-                                    // i32.add
-                                    println!("i32.add");
-                                }
-                                _ => {
-                                    println!("unmatched opcode");
-                                }
-                            }
-                        }
+                        self.match_opcodes(code_size);
                     }
                 }
                 11 => {
@@ -182,6 +164,33 @@ impl<'a> Parser<'a> {
             panic!("Invalid version!");
         }
     }
+
+    fn match_opcodes(&mut self, code_size: u32) {
+        for _ in 0..code_size {
+            // Handle opcodes
+            let opcode = self.cursor.read_u8().unwrap();
+            println!("opcode: {:x}", opcode);
+            match opcode {
+                0x20 => {
+                    // local.get
+                    let localidx = self.cursor.read_u8().unwrap();
+                    println!("local.get {}", localidx);
+                }
+                0x0B => {
+                    // function end byte
+                    println!("function end byte");
+                    break;
+                }
+                0x6A => {
+                    // i32.add
+                    println!("i32.add");
+                }
+                _ => {
+                    println!("unmatched opcode");
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -200,4 +209,11 @@ struct Function {
 struct Type {
     params: Vec<u8>,
     returns: Vec<u8>,
+}
+
+#[derive(Default)]
+struct Module {
+    types: Vec<Type>,
+    functions: Vec<Function>,
+    exports: Vec<Export>,
 }

@@ -35,7 +35,7 @@ impl<'a> Parser<'a> {
             match section_id {
                 0 => {
                     // This is a custom section
-                    unimplemented!("custom section");
+                    self.cursor.set_position(self.cursor.position() + section_size as u64);
                 }
                 1 => {
                     // This is the type section
@@ -205,11 +205,12 @@ impl<'a> Parser<'a> {
                     let (code_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
                     println!("code_vector_size: {}", code_vector_size);
                     for i in 0..code_vector_size {
-                        println!("\nFUNCTION {}", i);
                         let (code_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        let (locals_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let (local_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        println!("\nFUNCTION {}\tcode_size: {}", i, code_size);
 
-                        for _ in 0..locals_size {
+                        for _ in 0..local_vector_size {
+                            let (num_locals, _): (u32, _) = self.cursor.read_leb128().unwrap();
                             let local_type = self.cursor.read_u8().unwrap();
                             match local_type {
                                 0x7F | 0x7E | 0x7D | 0x7C => {}
@@ -217,7 +218,7 @@ impl<'a> Parser<'a> {
                                     panic!("invalid local type: {}", local_type);
                                 }
                             }
-                            print!("\tlocal_type: {:x}", local_type);
+                            println!("\tnum_locals: {}, local_type: {:x}", num_locals, local_type);
                         }
 
                         self.match_opcodes();
@@ -282,37 +283,72 @@ impl<'a> Parser<'a> {
                 // block
                 let block_type = self.cursor.read_u8().unwrap();
                 println!("block {:x}", block_type);
-                self.match_opcodes();
+                println!("start block");
+                while self.peek_byte() != 0x0B {
+                    self.match_opcode();
+                }
+                self.cursor.read_u8().unwrap();
+                println!("end block");
+            }
+            0x03 => {
+                // loop
+                let block_type = self.cursor.read_u8().unwrap();
+                println!("loop {:x}", block_type);
+                println!("start loop");
+                while self.peek_byte() != 0x0B {
+                    self.match_opcode();
+                }
+                self.cursor.read_u8().unwrap();
+                println!("end loop");
             }
             0x04 => {
                 // if
                 let block_type = self.cursor.read_u8().unwrap();
                 // TODO: how to handle block_type??
                 println!("if {:x}", block_type);
-                self.match_opcodes();
-                /*
-                let nb = self.peek_byte();
-                println!("nb {:x}", nb);
-                if nb == 0x05 {
-                    panic!("need to handle else case");
+                println!("start if");
+                while self.peek_byte() != 0x0B {
+                    if self.peek_byte() == 0x05 {
+                        println!("start else");
+                        self.cursor.read_u8().unwrap();
+                        while self.peek_byte() != 0x0B {
+                            self.match_opcode();
+                        }
+                        self.cursor.read_u8().unwrap();
+                        println!("end if");
+                        return false;
+                    }
+                    self.match_opcode();
                 }
-                */
+                self.cursor.read_u8().unwrap();
+                println!("end if");
             }
             0x05 => {
                 // else
                 println!("else");
                 // TODO: how to handle block_type??
-                self.match_opcodes();
+                println!("start else");
+                while self.peek_byte() != 0x0B {
+                    self.match_opcode();
+                }
+                self.cursor.read_u8().unwrap();
+                println!("end else");
+                // self.match_opcodes();
             }
             0x0B => {
                 // function end byte
                 println!("function end byte");
                 return true;
             }
+            0x0C => {
+                // br
+                let (label_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                println!("br: {}", label_idx);
+            }
             0x0D => {
                 // br_if
                 let (label_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                println!("label_idx: {}", label_idx);
+                println!("br_if: {}", label_idx);
             }
             0x0E => {
                 // br_table
@@ -331,10 +367,22 @@ impl<'a> Parser<'a> {
                 let (func_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
                 println!("call {}", func_idx);
             }
+            0x11 => {
+                // call_indirect
+                let (type_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                println!("call_indirect {}", type_idx);
+                let next_byte = self.cursor.read_u8().unwrap();
+                assert_eq!(next_byte, 0x00, "call_indirect not followed by 0x00");
+            }
             0x20 => {
                 // local.get
-                let local_idx = self.cursor.read_u8().unwrap();
+                let (local_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
                 println!("local.get {}", local_idx);
+            }
+            0x21 => {
+                // local.set
+                let (local_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                println!("local.set {}", local_idx);
             }
             0x2D => {
                 // i32.load8_u
@@ -353,6 +401,18 @@ impl<'a> Parser<'a> {
                 let (val, _): (u32, _) = self.cursor.read_leb128().unwrap();
                 println!("i32.const: {}", val);
             }
+            0x46 => {
+                // i32.eq
+                println!("i32.eq");
+            }
+            0x48 => {
+                // i32.lt_s
+                println!("i32.lt_s");
+            }
+            0x4E => {
+                // i32.ge_s
+                println!("i32.ge_s");
+            }
             0x6A => {
                 // i32.add
                 println!("i32.add");
@@ -364,6 +424,18 @@ impl<'a> Parser<'a> {
             0x71 => {
                 //i32.and
                 println!("i32.and");
+            }
+            0x72 => {
+                //i32.or
+                println!("i32.or");
+            }
+            0x74 => {
+                //i32.shl
+                println!("i32.shl");
+            }
+            0x76 => {
+                //i32.shr_u
+                println!("i32.shr_u");
             }
             _ => {
                 panic!("unmatched opcode: {:x}", opcode);

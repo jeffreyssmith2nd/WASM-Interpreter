@@ -35,7 +35,7 @@ enum ValueType {
 pub struct Parser<'a> {
     cursor: Cursor<&'a [u8]>,
     len: usize,
-    m: Module,
+    module: Module,
 }
 
 impl<'a> Parser<'a> {
@@ -43,7 +43,7 @@ impl<'a> Parser<'a> {
         Parser {
             len: buf.len(),
             cursor: Cursor::new(&buf),
-            m: Default::default(),
+            module: Default::default(),
         }
     }
 
@@ -153,7 +153,7 @@ impl<'a> Parser<'a> {
                 t.returns.push(return_value);
             }
             println!("{:?}", t);
-            self.m.types.push(t);
+            self.module.types.push(t);
         }
     }
 
@@ -182,7 +182,7 @@ impl<'a> Parser<'a> {
                 import_type,
             };
             println!("{:?}", import);
-            self.m.imports.push(import);
+            self.module.imports.push(import);
         }
     }
 
@@ -194,7 +194,7 @@ impl<'a> Parser<'a> {
                 type_index: type_idx,
             };
             println!("{:?}", func);
-            self.m.functions.push(func);
+            self.module.functions.push(func);
         }
     }
 
@@ -225,7 +225,7 @@ impl<'a> Parser<'a> {
             }
             let table = Table { min, max };
             println!("{:?}", table);
-            self.m.tables.push(table);
+            self.module.tables.push(table);
         }
     }
 
@@ -254,7 +254,7 @@ impl<'a> Parser<'a> {
             }
             let memory = Memory { min, max };
             println!("{:?}", memory);
-            self.m.memories.push(memory);
+            self.module.memories.push(memory);
         }
     }
 
@@ -277,7 +277,7 @@ impl<'a> Parser<'a> {
                 index: export_index,
             };
             println!("{:?}", export);
-            self.m.exports.push(export);
+            self.module.exports.push(export);
         }
     }
 

@@ -1,6 +1,8 @@
 use byteorder::ReadBytesExt;
+use num_traits::{AsPrimitive, PrimInt};
 use std::io::Cursor;
 use std::io::Read;
+
 use wasabi_leb128::ReadLeb128;
 
 pub struct Parser<'a> {
@@ -26,8 +28,8 @@ impl<'a> Parser<'a> {
                 break;
             }
 
-            let section_id = self.cursor.read_u8().unwrap();
-            let (section_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+            let section_id = self.get_u8();
+            let section_size = self.get_u32();
 
             println!("section_id {}", section_id);
             println!("section_size: {}", section_size);
@@ -35,24 +37,25 @@ impl<'a> Parser<'a> {
             match section_id {
                 0 => {
                     // This is a custom section
-                    self.cursor.set_position(self.cursor.position() + section_size as u64);
+                    self.cursor
+                        .set_position(self.cursor.position() + section_size as u64);
                 }
                 1 => {
                     // This is the type section
-                    let (type_vector_size, _) = self.cursor.read_leb128().unwrap();
+                    let type_vector_size = self.get_u32();
                     for _ in 0..type_vector_size {
-                        let func_byte = self.cursor.read_u8().unwrap();
+                        let func_byte = self.get_u8();
                         assert_eq!(func_byte, 0x60, "Function did not start with 0x60");
 
-                        let (param_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let param_vector_size = self.get_u32();
                         let mut t: Type = Default::default();
                         for _ in 0..param_vector_size {
-                            let param_value = self.cursor.read_u8().unwrap();
+                            let param_value = self.get_u8();
                             t.params.push(param_value);
                         }
-                        let (return_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let return_vector_size = self.get_u32();
                         for _ in 0..return_vector_size {
-                            let return_value = self.cursor.read_u8().unwrap();
+                            let return_value = self.get_u8();
                             t.returns.push(return_value);
                         }
                         println!("{:?}", t);
@@ -61,19 +64,19 @@ impl<'a> Parser<'a> {
                 }
                 2 => {
                     // This is the import section
-                    let (import_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let import_vector_size = self.get_u32();
                     for _ in 0..import_vector_size {
-                        let (module_name_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let module_name_size = self.get_u32();
                         let module_name = self.read_string(module_name_size as usize);
 
-                        let (name_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let name_size = self.get_u32();
                         let name = self.read_string(name_size as usize);
 
-                        let import_type = self.cursor.read_u8().unwrap();
+                        let import_type = self.get_u8();
                         match import_type {
                             0x00 => {
                                 println!("found a functype import");
-                                let (func_index, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                                let func_index = self.get_u32();
                                 println!("{:?}", func_index);
                             }
                             _ => panic!("umatched"),
@@ -89,11 +92,11 @@ impl<'a> Parser<'a> {
                     }
                 }
                 3 => {
-                    let (func_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let func_vector_size = self.get_u32();
                     for _ in 0..func_vector_size {
-                        let (typeidx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let type_idx = self.get_u32();
                         let func = Function {
-                            type_index: typeidx,
+                            type_index: type_idx,
                         };
                         println!("{:?}", func);
                         m.functions.push(func);
@@ -101,23 +104,23 @@ impl<'a> Parser<'a> {
                 }
                 4 => {
                     // This is the table section
-                    let (table_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let table_vector_size = self.get_u32();
                     for _ in 0..table_vector_size {
                         let min: u32;
                         let max: u32;
 
-                        let elem_type = self.cursor.read_u8().unwrap();
+                        let elem_type = self.get_u8();
                         assert_eq!(elem_type, 0x70, "Elem type was not 0x70");
-                        let limits_flag = self.cursor.read_u8().unwrap();
+                        let limits_flag = self.get_u8();
                         match limits_flag {
                             0x00 => {
-                                let (m, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                                let m = self.get_u32();
                                 min = m;
                                 max = 0;
                             }
                             0x01 => {
-                                let (mi, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                                let (ma, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                                let mi = self.get_u32();
+                                let ma = self.get_u32();
                                 min = mi;
                                 max = ma;
                             }
@@ -132,21 +135,21 @@ impl<'a> Parser<'a> {
                 }
                 5 => {
                     // This is the memory section
-                    let (memory_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let memory_vector_size = self.get_u32();
                     for _ in 0..memory_vector_size {
                         let min: u32;
                         let max: u32;
 
-                        let limits_flag = self.cursor.read_u8().unwrap();
+                        let limits_flag = self.get_u8();
                         match limits_flag {
                             0x00 => {
-                                let (m, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                                let m = self.get_u32();
                                 min = m;
                                 max = 0;
                             }
                             0x01 => {
-                                let (mi, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                                let (ma, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                                let mi = self.get_u32();
+                                let ma = self.get_u32();
                                 min = mi;
                                 max = ma;
                             }
@@ -165,13 +168,13 @@ impl<'a> Parser<'a> {
                 }
                 7 => {
                     // This is the export section
-                    let (export_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let export_vector_size = self.get_u32();
                     for _ in 0..export_vector_size {
-                        let (name_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let name_size = self.get_u32();
                         let name = self.read_string(name_size as usize);
 
-                        let export_type = self.cursor.read_u8().unwrap();
-                        let (export_index, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let export_type = self.get_u8();
+                        let export_index = self.get_u32();
 
                         let export = Export {
                             name: name,
@@ -188,30 +191,30 @@ impl<'a> Parser<'a> {
                 }
                 9 => {
                     // This is the element section
-                    let (elem_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let elem_vector_size = self.get_u32();
                     for _ in 0..elem_vector_size {
-                        let (table_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let table_idx = self.get_u32();
                         self.match_opcodes_size(2); // For opcode and function end byte
-                        let (func_idx_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let func_idx_size = self.get_u32();
                         println!("func_idx_size {}", func_idx_size);
                         for _ in 0..func_idx_size {
-                            let (func_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                            let func_idx = self.get_u32();
                         }
                     }
                 }
                 10 => {
                     // This is the code section
                     println!("code section");
-                    let (code_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let code_vector_size = self.get_u32();
                     println!("code_vector_size: {}", code_vector_size);
                     for i in 0..code_vector_size {
-                        let (code_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                        let (local_vector_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                        let code_size = self.get_u32();
+                        let local_vector_size = self.get_u32();
                         println!("\nFUNCTION {}\tcode_size: {}", i, code_size);
 
                         for _ in 0..local_vector_size {
-                            let (num_locals, _): (u32, _) = self.cursor.read_leb128().unwrap();
-                            let local_type = self.cursor.read_u8().unwrap();
+                            let num_locals = self.get_u32();
+                            let local_type = self.get_u8();
                             match local_type {
                                 0x7F | 0x7E | 0x7D | 0x7C => {}
                                 _ => {
@@ -269,8 +272,7 @@ impl<'a> Parser<'a> {
     }
 
     fn match_opcode(&mut self) -> bool {
-        let opcode = self.cursor.read_u8().unwrap();
-        // println!("opcode: {:x}", opcode);
+        let opcode = self.get_u8();
         match opcode {
             0x00 => {
                 panic!("unreachable");
@@ -281,47 +283,39 @@ impl<'a> Parser<'a> {
             }
             0x02 => {
                 // block
-                let block_type = self.cursor.read_u8().unwrap();
+                let block_type = self.get_u8();
                 println!("block {:x}", block_type);
-                println!("start block");
                 while self.peek_byte() != 0x0B {
                     self.match_opcode();
                 }
-                self.cursor.read_u8().unwrap();
-                println!("end block");
+                self.get_u8();
             }
             0x03 => {
                 // loop
-                let block_type = self.cursor.read_u8().unwrap();
+                let block_type = self.get_u8();
                 println!("loop {:x}", block_type);
-                println!("start loop");
                 while self.peek_byte() != 0x0B {
                     self.match_opcode();
                 }
-                self.cursor.read_u8().unwrap();
-                println!("end loop");
+                self.get_u8();
             }
             0x04 => {
                 // if
-                let block_type = self.cursor.read_u8().unwrap();
+                let block_type = self.get_u8();
                 // TODO: how to handle block_type??
                 println!("if {:x}", block_type);
-                println!("start if");
                 while self.peek_byte() != 0x0B {
                     if self.peek_byte() == 0x05 {
-                        println!("start else");
-                        self.cursor.read_u8().unwrap();
+                        self.get_u8();
                         while self.peek_byte() != 0x0B {
                             self.match_opcode();
                         }
-                        self.cursor.read_u8().unwrap();
-                        println!("end if");
+                        self.get_u8();
                         return false;
                     }
                     self.match_opcode();
                 }
-                self.cursor.read_u8().unwrap();
-                println!("end if");
+                self.get_u8();
             }
             0x05 => {
                 // else
@@ -331,7 +325,7 @@ impl<'a> Parser<'a> {
                 while self.peek_byte() != 0x0B {
                     self.match_opcode();
                 }
-                self.cursor.read_u8().unwrap();
+                self.get_u8();
                 println!("end else");
                 // self.match_opcodes();
             }
@@ -342,63 +336,63 @@ impl<'a> Parser<'a> {
             }
             0x0C => {
                 // br
-                let (label_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let label_idx = self.get_u32();
                 println!("br: {}", label_idx);
             }
             0x0D => {
                 // br_if
-                let (label_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let label_idx = self.get_u32();
                 println!("br_if: {}", label_idx);
             }
             0x0E => {
                 // br_table
                 print!("br_table: ");
-                let (label_size, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let label_size = self.get_u32();
                 print!("label_size: {}", label_size);
                 for _ in 0..label_size {
-                    let (label_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                    let label_idx = self.get_u32();
                     print!("\tlabel_idx: {}", label_idx);
                 }
-                let (label_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let label_idx = self.get_u32();
                 println!(" label_idx: {}", label_idx);
             }
             0x10 => {
                 // call
-                let (func_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let func_idx = self.get_u32();
                 println!("call {}", func_idx);
             }
             0x11 => {
                 // call_indirect
-                let (type_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let type_idx = self.get_u32();
                 println!("call_indirect {}", type_idx);
-                let next_byte = self.cursor.read_u8().unwrap();
+                let next_byte = self.get_u8();
                 assert_eq!(next_byte, 0x00, "call_indirect not followed by 0x00");
             }
             0x20 => {
                 // local.get
-                let (local_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let local_idx = self.get_u32();
                 println!("local.get {}", local_idx);
             }
             0x21 => {
                 // local.set
-                let (local_idx, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let local_idx = self.get_u32();
                 println!("local.set {}", local_idx);
             }
             0x2D => {
                 // i32.load8_u
-                let align = self.cursor.read_u8().unwrap();
-                let offset = self.cursor.read_u8().unwrap();
+                let align = self.get_u32();
+                let offset = self.get_u32();
                 println!("i32.load8_u {} {}", align, offset);
             }
             0x36 => {
                 // i32.store
-                let align = self.cursor.read_u8().unwrap();
-                let offset = self.cursor.read_u8().unwrap();
+                let align = self.get_u32();
+                let offset = self.get_u32();
                 println!("i32.store {} {}", align, offset);
             }
             0x41 => {
                 // i32.const
-                let (val, _): (u32, _) = self.cursor.read_leb128().unwrap();
+                let val = self.get_u32();
                 println!("i32.const: {}", val);
             }
             0x46 => {
@@ -461,9 +455,42 @@ impl<'a> Parser<'a> {
 
     fn peek_byte(&mut self) -> u8 {
         let pos = self.cursor.position();
-        let val = self.cursor.read_u8().unwrap();
+        let val = self.get_u8();
         self.cursor.set_position(pos);
         val
+    }
+
+    fn get_u8(&mut self) -> u8 {
+        let ret = self.cursor.read_u8();
+        match ret {
+            Ok(val) => val,
+            Err(err) => {
+                panic!(err);
+            }
+        }
+    }
+
+    fn get_u32(&mut self) -> u32 {
+        let ret: Result<(u32, usize), wasabi_leb128::ParseLeb128Error> = self.cursor.read_leb128();
+        match ret {
+            Ok(val) => {
+                let (val, _): (u32, _) = val;
+                val
+            }
+            Err(err) => {
+                // TODO: Clean this up later
+                panic!(err);
+            }
+        }
+    }
+
+    fn get_leb128_value<T>(&mut self) -> T
+    where
+        T: PrimInt + 'static,
+        u8: AsPrimitive<T>,
+    {
+        let (t, _): (T, _) = self.cursor.read_leb128().unwrap();
+        return t;
     }
 }
 

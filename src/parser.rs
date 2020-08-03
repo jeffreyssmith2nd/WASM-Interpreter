@@ -35,6 +35,7 @@ enum ValueType {
 pub struct Parser<'a> {
     cursor: Cursor<&'a [u8]>,
     len: usize,
+    m: Module,
 }
 
 impl<'a> Parser<'a> {
@@ -42,13 +43,12 @@ impl<'a> Parser<'a> {
         Parser {
             len: buf.len(),
             cursor: Cursor::new(&buf),
+            m: Default::default(),
         }
     }
 
     pub fn parse(&mut self) {
         self.verify_preamble();
-
-        let mut m: Module = Default::default();
 
         loop {
             if self.cursor.position() == self.len as u64 {
@@ -63,192 +63,40 @@ impl<'a> Parser<'a> {
 
             match FromPrimitive::from_u8(section_id) {
                 Some(Section::Custom) => {
-                    self.cursor
-                        .set_position(self.cursor.position() + section_size as u64);
+                    self.parse_custom_section(section_size);
                 }
                 Some(Section::Type) => {
-                    let type_vector_size = self.get_u32();
-                    for _ in 0..type_vector_size {
-                        let func_byte = self.get_u8();
-                        assert_eq!(func_byte, 0x60, "Function did not start with 0x60");
-
-                        let param_vector_size = self.get_u32();
-                        let mut t: Type = Default::default();
-                        for _ in 0..param_vector_size {
-                            let param_value = self.get_u8();
-                            t.params.push(param_value);
-                        }
-                        let return_vector_size = self.get_u32();
-                        for _ in 0..return_vector_size {
-                            let return_value = self.get_u8();
-                            t.returns.push(return_value);
-                        }
-                        println!("{:?}", t);
-                        m.types.push(t);
-                    }
+                    self.parse_type_section();
                 }
                 Some(Section::Import) => {
-                    let import_vector_size = self.get_u32();
-                    for _ in 0..import_vector_size {
-                        let module_name_size = self.get_u32();
-                        let module_name = self.read_string(module_name_size as usize);
-
-                        let name_size = self.get_u32();
-                        let name = self.read_string(name_size as usize);
-
-                        let import_type = self.get_u8();
-                        match import_type {
-                            0x00 => {
-                                println!("found a functype import");
-                                let func_index = self.get_u32();
-                                println!("{:?}", func_index);
-                            }
-                            _ => panic!("umatched"),
-                        }
-
-                        let import = Import {
-                            module: module_name,
-                            name,
-                            import_type,
-                        };
-                        println!("{:?}", import);
-                        m.imports.push(import);
-                    }
+                    self.parse_import_section();
                 }
                 Some(Section::Function) => {
-                    let func_vector_size = self.get_u32();
-                    for _ in 0..func_vector_size {
-                        let type_idx = self.get_u32();
-                        let func = Function {
-                            type_index: type_idx,
-                        };
-                        println!("{:?}", func);
-                        m.functions.push(func);
-                    }
+                    self.parse_function_section();
                 }
                 Some(Section::Table) => {
-                    let table_vector_size = self.get_u32();
-                    for _ in 0..table_vector_size {
-                        let min: u32;
-                        let max: u32;
-
-                        let elem_type = self.get_u8();
-                        assert_eq!(elem_type, 0x70, "Elem type was not 0x70");
-                        let limits_flag = self.get_u8();
-                        match limits_flag {
-                            0x00 => {
-                                let m = self.get_u32();
-                                min = m;
-                                max = 0;
-                            }
-                            0x01 => {
-                                let mi = self.get_u32();
-                                let ma = self.get_u32();
-                                min = mi;
-                                max = ma;
-                            }
-                            _ => {
-                                panic!("Incorrect table limit flag");
-                            }
-                        }
-                        let table = Table { min, max };
-                        println!("{:?}", table);
-                        m.tables.push(table);
-                    }
+                    self.parse_table_section();
                 }
                 Some(Section::Memory) => {
-                    let memory_vector_size = self.get_u32();
-                    for _ in 0..memory_vector_size {
-                        let min: u32;
-                        let max: u32;
-
-                        let limits_flag = self.get_u8();
-                        match limits_flag {
-                            0x00 => {
-                                let m = self.get_u32();
-                                min = m;
-                                max = 0;
-                            }
-                            0x01 => {
-                                let mi = self.get_u32();
-                                let ma = self.get_u32();
-                                min = mi;
-                                max = ma;
-                            }
-                            _ => {
-                                panic!("Incorrect table limit flag");
-                            }
-                        }
-                        let memory = Memory { min, max };
-                        println!("{:?}", memory);
-                        m.memories.push(memory);
-                    }
+                    self.parse_memory_section();
                 }
                 Some(Section::Global) => {
-                    unimplemented!("global section");
+                    self.parse_global_section();
                 }
                 Some(Section::Export) => {
-                    let export_vector_size = self.get_u32();
-                    for _ in 0..export_vector_size {
-                        let name_size = self.get_u32();
-                        let name = self.read_string(name_size as usize);
-
-                        let export_type = self.get_u8();
-                        let export_index = self.get_u32();
-
-                        let export = Export {
-                            name,
-                            type_index: export_type,
-                            index: export_index,
-                        };
-                        println!("{:?}", export);
-                        m.exports.push(export);
-                    }
+                    self.parse_export_section();
                 }
                 Some(Section::Start) => {
-                    unimplemented!("start section");
+                    self.parse_start_section();
                 }
                 Some(Section::Element) => {
-                    let elem_vector_size = self.get_u32();
-                    for _ in 0..elem_vector_size {
-                        let table_idx = self.get_u32();
-                        self.match_opcodes_size(2); // For opcode and function end byte
-                        let func_idx_size = self.get_u32();
-                        println!("func_idx_size {}", func_idx_size);
-                        for _ in 0..func_idx_size {
-                            let func_idx = self.get_u32();
-                        }
-                    }
+                    self.parse_element_section();
                 }
                 Some(Section::Code) => {
-                    println!("code section");
-                    let code_vector_size = self.get_u32();
-                    println!("code_vector_size: {}", code_vector_size);
-                    for i in 0..code_vector_size {
-                        let code_size = self.get_u32();
-                        let local_vector_size = self.get_u32();
-                        println!("\nFUNCTION {}\tcode_size: {}", i, code_size);
-
-                        for _ in 0..local_vector_size {
-                            let num_locals = self.get_u32();
-                            let local_type = self.get_u8();
-                            match FromPrimitive::from_u8(local_type) {
-                                Some(ValueType::I32) | Some(ValueType::I64)
-                                | Some(ValueType::F32) | Some(ValueType::F64) => {}
-                                None => {
-                                    panic!("invalid local type: {}", local_type);
-                                }
-                            }
-                            println!("\tnum_locals: {}, local_type: {:x}", num_locals, local_type);
-                        }
-
-                        self.match_opcodes();
-                        println!("\n");
-                    }
+                    self.parse_code_section();
                 }
                 Some(Section::Data) => {
-                    // This is the data section
-                    unimplemented!("data section");
+                    self.parse_data_section();
                 }
                 None => {
                     panic!("Bad section id");
@@ -280,6 +128,205 @@ impl<'a> Parser<'a> {
         if version != expected_version {
             panic!("Invalid version!");
         }
+    }
+
+    fn parse_custom_section(&mut self, section_size: u32) {
+        self.cursor
+            .set_position(self.cursor.position() + section_size as u64);
+    }
+
+    fn parse_type_section(&mut self) {
+        let type_vector_size = self.get_u32();
+        for _ in 0..type_vector_size {
+            let func_byte = self.get_u8();
+            assert_eq!(func_byte, 0x60, "Function did not start with 0x60");
+
+            let param_vector_size = self.get_u32();
+            let mut t: Type = Default::default();
+            for _ in 0..param_vector_size {
+                let param_value = self.get_u8();
+                t.params.push(param_value);
+            }
+            let return_vector_size = self.get_u32();
+            for _ in 0..return_vector_size {
+                let return_value = self.get_u8();
+                t.returns.push(return_value);
+            }
+            println!("{:?}", t);
+            self.m.types.push(t);
+        }
+    }
+
+    fn parse_import_section(&mut self) {
+        let import_vector_size = self.get_u32();
+        for _ in 0..import_vector_size {
+            let module_name_size = self.get_u32();
+            let module_name = self.read_string(module_name_size as usize);
+
+            let name_size = self.get_u32();
+            let name = self.read_string(name_size as usize);
+
+            let import_type = self.get_u8();
+            match import_type {
+                0x00 => {
+                    println!("found a functype import");
+                    let func_index = self.get_u32();
+                    println!("{:?}", func_index);
+                }
+                _ => panic!("umatched"),
+            }
+
+            let import = Import {
+                module: module_name,
+                name,
+                import_type,
+            };
+            println!("{:?}", import);
+            self.m.imports.push(import);
+        }
+    }
+
+    fn parse_function_section(&mut self) {
+        let func_vector_size = self.get_u32();
+        for _ in 0..func_vector_size {
+            let type_idx = self.get_u32();
+            let func = Function {
+                type_index: type_idx,
+            };
+            println!("{:?}", func);
+            self.m.functions.push(func);
+        }
+    }
+
+    fn parse_table_section(&mut self) {
+        let table_vector_size = self.get_u32();
+        for _ in 0..table_vector_size {
+            let min: u32;
+            let max: u32;
+
+            let elem_type = self.get_u8();
+            assert_eq!(elem_type, 0x70, "Elem type was not 0x70");
+            let limits_flag = self.get_u8();
+            match limits_flag {
+                0x00 => {
+                    let m = self.get_u32();
+                    min = m;
+                    max = 0;
+                }
+                0x01 => {
+                    let mi = self.get_u32();
+                    let ma = self.get_u32();
+                    min = mi;
+                    max = ma;
+                }
+                _ => {
+                    panic!("Incorrect table limit flag");
+                }
+            }
+            let table = Table { min, max };
+            println!("{:?}", table);
+            self.m.tables.push(table);
+        }
+    }
+
+    fn parse_memory_section(&mut self) {
+        let memory_vector_size = self.get_u32();
+        for _ in 0..memory_vector_size {
+            let min: u32;
+            let max: u32;
+
+            let limits_flag = self.get_u8();
+            match limits_flag {
+                0x00 => {
+                    let m = self.get_u32();
+                    min = m;
+                    max = 0;
+                }
+                0x01 => {
+                    let mi = self.get_u32();
+                    let ma = self.get_u32();
+                    min = mi;
+                    max = ma;
+                }
+                _ => {
+                    panic!("Incorrect table limit flag");
+                }
+            }
+            let memory = Memory { min, max };
+            println!("{:?}", memory);
+            self.m.memories.push(memory);
+        }
+    }
+
+    fn parse_global_section(&mut self) {
+        unimplemented!("global section");
+    }
+
+    fn parse_export_section(&mut self) {
+        let export_vector_size = self.get_u32();
+        for _ in 0..export_vector_size {
+            let name_size = self.get_u32();
+            let name = self.read_string(name_size as usize);
+
+            let export_type = self.get_u8();
+            let export_index = self.get_u32();
+
+            let export = Export {
+                name,
+                type_index: export_type,
+                index: export_index,
+            };
+            println!("{:?}", export);
+            self.m.exports.push(export);
+        }
+    }
+
+    fn parse_start_section(&mut self) {
+        unimplemented!("start section");
+    }
+
+    fn parse_element_section(&mut self) {
+        let elem_vector_size = self.get_u32();
+        for _ in 0..elem_vector_size {
+            let table_idx = self.get_u32();
+            self.match_opcodes_size(2); // For opcode and function end byte
+            let func_idx_size = self.get_u32();
+            println!("func_idx_size {}", func_idx_size);
+            for _ in 0..func_idx_size {
+                let func_idx = self.get_u32();
+            }
+        }
+    }
+
+    fn parse_code_section(&mut self) {
+        println!("code section");
+        let code_vector_size = self.get_u32();
+        println!("code_vector_size: {}", code_vector_size);
+        for i in 0..code_vector_size {
+            let code_size = self.get_u32();
+            let local_vector_size = self.get_u32();
+            println!("\nFUNCTION {}\tcode_size: {}", i, code_size);
+
+            for _ in 0..local_vector_size {
+                let num_locals = self.get_u32();
+                let local_type = self.get_u8();
+                match FromPrimitive::from_u8(local_type) {
+                    Some(ValueType::I32) | Some(ValueType::I64) | Some(ValueType::F32)
+                    | Some(ValueType::F64) => {}
+                    None => {
+                        panic!("invalid local type: {}", local_type);
+                    }
+                }
+                println!("\tnum_locals: {}, local_type: {:x}", num_locals, local_type);
+            }
+
+            self.match_opcodes();
+            println!("\n");
+        }
+    }
+
+    fn parse_data_section(&mut self) {
+        unimplemented!("data section");
     }
 
     fn read_string(&mut self, size: usize) -> String {

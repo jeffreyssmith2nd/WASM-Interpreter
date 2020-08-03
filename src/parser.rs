@@ -84,8 +84,8 @@ impl<'a> Parser<'a> {
 
                         let import = Import {
                             module: module_name,
-                            name: name,
-                            import_type: import_type,
+                            name,
+                            import_type,
                         };
                         println!("{:?}", import);
                         m.imports.push(import);
@@ -128,7 +128,7 @@ impl<'a> Parser<'a> {
                                 panic!("Incorrect table limit flag");
                             }
                         }
-                        let table = Table { min: min, max: max };
+                        let table = Table { min, max };
                         println!("{:?}", table);
                         m.tables.push(table);
                     }
@@ -157,7 +157,7 @@ impl<'a> Parser<'a> {
                                 panic!("Incorrect table limit flag");
                             }
                         }
-                        let memory = Memory { min: min, max: max };
+                        let memory = Memory { min, max };
                         println!("{:?}", memory);
                         m.memories.push(memory);
                     }
@@ -177,7 +177,7 @@ impl<'a> Parser<'a> {
                         let export_index = self.get_u32();
 
                         let export = Export {
-                            name: name,
+                            name,
                             type_index: export_type,
                             index: export_index,
                         };
@@ -268,7 +268,7 @@ impl<'a> Parser<'a> {
         let mut buf = vec![0u8; size as usize];
         self.cursor.read_exact(&mut buf).unwrap();
         let s = std::str::from_utf8(buf.as_slice());
-        return s.unwrap().to_string();
+        s.unwrap().to_string()
     }
 
     fn match_opcode(&mut self) -> bool {
@@ -490,7 +490,7 @@ impl<'a> Parser<'a> {
         u8: AsPrimitive<T>,
     {
         let (t, _): (T, _) = self.cursor.read_leb128().unwrap();
-        return t;
+        t
     }
 }
 

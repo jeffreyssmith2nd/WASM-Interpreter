@@ -24,6 +24,14 @@ enum Section {
     Data,
 }
 
+#[derive(FromPrimitive)]
+enum ValueType {
+    I32 = 0x7F,
+    I64 = 0x7E,
+    F32 = 0x7D,
+    F64 = 0x7C,
+}
+
 pub struct Parser<'a> {
     cursor: Cursor<&'a [u8]>,
     len: usize,
@@ -224,9 +232,10 @@ impl<'a> Parser<'a> {
                         for _ in 0..local_vector_size {
                             let num_locals = self.get_u32();
                             let local_type = self.get_u8();
-                            match local_type {
-                                0x7F | 0x7E | 0x7D | 0x7C => {}
-                                _ => {
+                            match FromPrimitive::from_u8(local_type) {
+                                Some(ValueType::I32) | Some(ValueType::I64)
+                                | Some(ValueType::F32) | Some(ValueType::F64) => {}
+                                None => {
                                     panic!("invalid local type: {}", local_type);
                                 }
                             }

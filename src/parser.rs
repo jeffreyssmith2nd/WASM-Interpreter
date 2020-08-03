@@ -5,6 +5,25 @@ use std::io::Read;
 
 use wasabi_leb128::ReadLeb128;
 
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
+
+#[derive(FromPrimitive)]
+enum Section {
+    Custom = 0,
+    Type,
+    Import,
+    Function,
+    Table,
+    Memory,
+    Global,
+    Export,
+    Start,
+    Element,
+    Code,
+    Data,
+}
+
 pub struct Parser<'a> {
     cursor: Cursor<&'a [u8]>,
     len: usize,
@@ -34,14 +53,12 @@ impl<'a> Parser<'a> {
             println!("section_id {}", section_id);
             println!("section_size: {}", section_size);
 
-            match section_id {
-                0 => {
-                    // This is a custom section
+            match FromPrimitive::from_u8(section_id) {
+                Some(Section::Custom) => {
                     self.cursor
                         .set_position(self.cursor.position() + section_size as u64);
                 }
-                1 => {
-                    // This is the type section
+                Some(Section::Type) => {
                     let type_vector_size = self.get_u32();
                     for _ in 0..type_vector_size {
                         let func_byte = self.get_u8();
@@ -62,8 +79,7 @@ impl<'a> Parser<'a> {
                         m.types.push(t);
                     }
                 }
-                2 => {
-                    // This is the import section
+                Some(Section::Import) => {
                     let import_vector_size = self.get_u32();
                     for _ in 0..import_vector_size {
                         let module_name_size = self.get_u32();
@@ -91,7 +107,7 @@ impl<'a> Parser<'a> {
                         m.imports.push(import);
                     }
                 }
-                3 => {
+                Some(Section::Function) => {
                     let func_vector_size = self.get_u32();
                     for _ in 0..func_vector_size {
                         let type_idx = self.get_u32();
@@ -102,8 +118,7 @@ impl<'a> Parser<'a> {
                         m.functions.push(func);
                     }
                 }
-                4 => {
-                    // This is the table section
+                Some(Section::Table) => {
                     let table_vector_size = self.get_u32();
                     for _ in 0..table_vector_size {
                         let min: u32;
@@ -133,8 +148,7 @@ impl<'a> Parser<'a> {
                         m.tables.push(table);
                     }
                 }
-                5 => {
-                    // This is the memory section
+                Some(Section::Memory) => {
                     let memory_vector_size = self.get_u32();
                     for _ in 0..memory_vector_size {
                         let min: u32;
@@ -162,12 +176,10 @@ impl<'a> Parser<'a> {
                         m.memories.push(memory);
                     }
                 }
-                6 => {
-                    // This is the global section
+                Some(Section::Global) => {
                     unimplemented!("global section");
                 }
-                7 => {
-                    // This is the export section
+                Some(Section::Export) => {
                     let export_vector_size = self.get_u32();
                     for _ in 0..export_vector_size {
                         let name_size = self.get_u32();
@@ -185,12 +197,10 @@ impl<'a> Parser<'a> {
                         m.exports.push(export);
                     }
                 }
-                8 => {
-                    // This is the start section
+                Some(Section::Start) => {
                     unimplemented!("start section");
                 }
-                9 => {
-                    // This is the element section
+                Some(Section::Element) => {
                     let elem_vector_size = self.get_u32();
                     for _ in 0..elem_vector_size {
                         let table_idx = self.get_u32();
@@ -202,8 +212,7 @@ impl<'a> Parser<'a> {
                         }
                     }
                 }
-                10 => {
-                    // This is the code section
+                Some(Section::Code) => {
                     println!("code section");
                     let code_vector_size = self.get_u32();
                     println!("code_vector_size: {}", code_vector_size);
@@ -228,11 +237,11 @@ impl<'a> Parser<'a> {
                         println!("\n");
                     }
                 }
-                11 => {
+                Some(Section::Data) => {
                     // This is the data section
                     unimplemented!("data section");
                 }
-                _ => {
+                None => {
                     panic!("Bad section id");
                 }
             }
